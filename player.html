@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TV Corporativa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'DM Sans',sans-serif}
+
+#stage{position:relative;width:100vw;height:100vh;background:#0a0a0a;overflow:hidden}
+
+.slide-layer{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .8s ease;
+  pointer-events:none;z-index:1;
+}
+.slide-layer.active{opacity:1;pointer-events:auto;z-index:2}
+.slide-layer.exit{opacity:0;z-index:1}
+
+/* Transições */
+body.transition-slide .slide-layer{transform:translateX(100%);transition:transform .7s cubic-bezier(.4,0,.2,1),opacity .4s}
+body.transition-slide .slide-layer.active{transform:translateX(0);opacity:1}
+body.transition-slide .slide-layer.exit{transform:translateX(-100%);opacity:0}
+body.transition-zoom .slide-layer{transform:scale(1.05);transition:transform .8s ease,opacity .7s}
+body.transition-zoom .slide-layer.active{transform:scale(1);opacity:1}
+body.transition-zoom .slide-layer.exit{transform:scale(.95);opacity:0}
+
+.slide-layer img{width:100%;height:100%;object-fit:contain}
+.slide-layer video{width:100%;height:100%;object-fit:cover}
+.slide-layer iframe{width:100%;height:100%;border:none;pointer-events:none}
+.slide-html-content{width:100%;height:100%;overflow:hidden}
+
+#hud{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:18px 28px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.6) 0%,transparent 100%);
+  pointer-events:none;
+}
+#logo-area img{height:42px;filter:drop-shadow(0 1px 4px rgba(0,0,0,.5))}
+.site-name{font-family:'Barlow Condensed',sans-serif;font-size:1.6rem;font-weight:700;color:#fff;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+#clock-time{font-family:'Barlow Condensed',sans-serif;font-size:2.8rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 2px 10px rgba(0,0,0,.6);text-align:right}
+#clock-date{font-size:.85rem;color:rgba(255,255,255,.75);letter-spacing:.04em;margin-top:2px;text-align:right}
+
+#progress-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;height:4px;background:rgba(255,255,255,.15)}
+#progress-fill{height:100%;background:linear-gradient(90deg,#38bdf8,#818cf8);width:0%;transition:width linear}
+
+#slide-counter{
+  position:fixed;bottom:14px;right:22px;z-index:100;
+  font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:600;
+  color:rgba(255,255,255,.45);letter-spacing:.05em;
+}
+
+#loading{
+  position:fixed;inset:0;z-index:999;background:#050505;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity .6s ease;
+}
+#loading .spinner{
+  width:48px;height:48px;
+  border:3px solid rgba(255,255,255,.1);border-top-color:#38bdf8;
+  border-radius:50%;animation:spin 1s linear infinite;
+}
+#loading p{color:rgba(255,255,255,.4);font-size:.95rem;letter-spacing:.06em}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#error-screen{
+  position:fixed;inset:0;z-index:998;background:#0a0a0a;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:#ef4444;font-size:1.1rem;
+}
+#error-screen code{
+  background:#1e293b;color:#94a3b8;padding:10px 16px;border-radius:8px;
+  font-size:.75rem;word-break:break-all;max-width:80vw;text-align:center;display:block;margin-top:8px;
+}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>CARREGANDO PLAYLIST...</p></div>
+<div id="error-screen">
+  <span style="font-size:3rem">📺</span>
+  <strong id="error-title">Não foi possível carregar</strong>
+  <code id="error-msg"></code>
+</div>
+
+<div id="stage"></div>
+<div id="hud">
+  <div id="logo-area"></div>
+  <div id="clock-area"><div id="clock-time">--:--</div><div id="clock-date"></div></div>
+</div>
+<div id="progress-bar"><div id="progress-fill"></div></div>
+<div id="slide-counter"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  TV Corporativa Player  v1.0 — Google Sheets edition
+// ═══════════════════════════════════════════════════════
+
+const p            = new URLSearchParams(location.search);
+const API          = p.get('api')      || '';      // URL do Apps Script
+const PLAYLIST_TAG = p.get('playlist') || '';
+const SCREEN_TOKEN = p.get('screen')   || '';
+
+let slides = [], settings = {}, currentIndex = 0;
+let progressTimer = null, refreshTimer = null, currentLayer = null;
+
+const stage   = document.getElementById('stage');
+const loading = document.getElementById('loading');
+const errScr  = document.getElementById('error-screen');
+const errMsg  = document.getElementById('error-msg');
+const errTtl  = document.getElementById('error-title');
+const logoArea= document.getElementById('logo-area');
+const cTime   = document.getElementById('clock-time');
+const cDate   = document.getElementById('clock-date');
+const pFill   = document.getElementById('progress-fill');
+const counter = document.getElementById('slide-counter');
+
+// ── Relógio ───────────────────────────────────────────
+const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const MONS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function tick() {
+  const n = new Date();
+  cTime.textContent = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+  cDate.textContent = DAYS[n.getDay()] + ', ' + n.getDate() + ' ' + MONS[n.getMonth()];
+}
+setInterval(tick, 1000); tick();
+
+// ── Chamadas API ──────────────────────────────────────
+async function apiGet(action, extra = {}) {
+  if (!API) throw new Error('Parâmetro ?api= não informado na URL do player.');
+  const url = new URL(API);
+  url.searchParams.set('action', action);
+  Object.entries(extra).forEach(([k,v]) => url.searchParams.set(k, v));
+  const r = await fetch(url.toString());
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function fetchSettings() {
+  try {
+    settings = await apiGet('settings');
+    document.body.className = 'transition-' + (settings.transition || 'fade');
+    if (!settings.show_clock)    document.getElementById('clock-area').style.display = 'none';
+    if (!settings.show_progress) document.getElementById('progress-bar').style.display = 'none';
+    if (settings.logo_url) {
+      logoArea.innerHTML = `<img src="${settings.logo_url}" alt="Logo"/>`;
+    } else if (settings.site_name) {
+      logoArea.innerHTML = `<div class="site-name">${settings.site_name}</div>`;
+    }
+  } catch(e) {}
+}
+
+async function fetchScreenConfig() {
+  if (!SCREEN_TOKEN) return {};
+  try { return await apiGet('screen', { token: SCREEN_TOKEN }); }
+  catch(e) { return {}; }
+}
+
+async function fetchPlaylist(slug) {
+  const extra = slug ? { playlist: slug } : {};
+  const data  = await apiGet('playlist', extra);
+  return data.slides || [];
+}
+
+// ── YouTube embed ─────────────────────────────────────
+function ytEmbed(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+  if (!m) return null;
+  const id = m[1];
+  return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&modestbranding=1`;
+}
+
+// ── Construir slide ───────────────────────────────────
+function buildSlide(slide) {
+  const layer = document.createElement('div');
+  layer.className = 'slide-layer';
+  layer.dataset.id = slide.id;
+
+  switch(slide.type) {
+    case 'image': {
+      const img = new Image();
+      img.src = slide.media_url; img.alt = slide.title;
+      layer.appendChild(img); break;
+    }
+    case 'video': {
+      const ytUrl = ytEmbed(slide.media_url || '');
+      if (ytUrl) {
+        const f = document.createElement('iframe');
+        f.src = ytUrl; f.allow = 'autoplay;encrypted-media'; f.allowFullscreen = true;
+        layer.appendChild(f);
+      } else {
+        const v = document.createElement('video');
+        v.src = slide.media_url; v.autoplay = v.muted = v.loop = v.playsInline = true;
+        v.setAttribute('playsinline','');
+        layer.appendChild(v);
+      }
+      break;
+    }
+    case 'url': {
+      const f = document.createElement('iframe');
+      f.src = slide.media_url;
+      f.allow = 'autoplay;fullscreen';
+      f.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups';
+      layer.appendChild(f); break;
+    }
+    case 'html': {
+      const d = document.createElement('div');
+      d.className = 'slide-html-content'; d.innerHTML = slide.html || '';
+      layer.appendChild(d); break;
+    }
+    default:
+      layer.innerHTML = `<div style="color:#fff;font-size:2rem;text-align:center;padding:40px">${slide.title}</div>`;
+  }
+  return layer;
+}
+
+// ── Exibir slide ──────────────────────────────────────
+function showSlide(i) {
+  if (!slides.length) return;
+  const slide = slides[i];
+  clearTimeout(progressTimer);
+
+  stage.querySelectorAll('.exit').forEach(el => el.remove());
+  if (currentLayer) {
+    currentLayer.classList.remove('active');
+    currentLayer.classList.add('exit');
+    const old = currentLayer;
+    setTimeout(() => old.remove(), 900);
+  }
+
+  const layer = buildSlide(slide);
+  stage.appendChild(layer);
+  requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('active')));
+  currentLayer = layer;
+  counter.textContent = (i + 1) + ' / ' + slides.length;
+
+  const v = layer.querySelector('video');
+  if (v) v.play().catch(()=>{});
+
+  // Progress bar
+  pFill.style.transition = 'none'; pFill.style.width = '0%';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    pFill.style.transition = `width ${slide.duration * 1000}ms linear`;
+    pFill.style.width = '100%';
+  }));
+
+  progressTimer = setTimeout(() => {
+    currentIndex = (i + 1) % slides.length;
+    showSlide(currentIndex);
+  }, slide.duration * 1000);
+}
+
+async function bgRefresh(slug) {
+  try {
+    const s = await fetchPlaylist(slug);
+    if (s.length > 0) slides = s;
+  } catch(e) {}
+}
+
+// ── Init ──────────────────────────────────────────────
+async function init() {
+  if (!API) {
+    errTtl.textContent = 'Parâmetro ?api= não informado';
+    errMsg.textContent = 'A URL do player precisa conter: ?api=URL_DO_APPS_SCRIPT';
+    errScr.style.display = 'flex'; loading.style.display = 'none'; return;
+  }
+
+  await fetchSettings();
+
+  let slug = PLAYLIST_TAG;
+  if (!slug && SCREEN_TOKEN) {
+    const cfg = await fetchScreenConfig();
+    if (cfg.playlist) slug = cfg.playlist;
+  }
+
+  try { slides = await fetchPlaylist(slug); }
+  catch(e) {
+    loading.style.opacity = '0';
+    setTimeout(() => loading.style.display = 'none', 600);
+    errTtl.textContent = 'Erro ao carregar a playlist';
+    errMsg.textContent = e.message + '\n\nVerifique se a URL do Apps Script está correta e publicada como Web App pública.';
+    errScr.style.display = 'flex'; return;
+  }
+
+  if (!slides.length) {
+    loading.style.opacity = '0';
+    setTimeout(() => loading.style.display = 'none', 600);
+    errTtl.textContent = 'Nenhum slide ativo';
+    errMsg.textContent = 'Adicione slides na aba "slides" da planilha e marque "ativo" como true.';
+    errScr.style.display = 'flex'; return;
+  }
+
+  loading.style.opacity = '0';
+  setTimeout(() => loading.style.display = 'none', 600);
+  showSlide(0);
+
+  const interval = (settings.refresh_interval || 300) * 1000;
+  refreshTimer = setInterval(() => bgRefresh(slug), interval);
+}
+
+// ── Teclado ───────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') {
+    clearTimeout(progressTimer);
+    currentIndex = (currentIndex + 1) % slides.length;
+    showSlide(currentIndex);
+  }
+  if (e.key === 'ArrowLeft') {
+    clearTimeout(progressTimer);
+    currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+    showSlide(currentIndex);
+  }
+  if (e.key === 'r' || e.key === 'R') bgRefresh(PLAYLIST_TAG);
+  if (e.key === 'f' || e.key === 'F') {
+    document.fullscreenElement
+      ? document.exitFullscreen()
+      : document.documentElement.requestFullscreen().catch(()=>{});
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && slides.length) showSlide(currentIndex);
+});
+
+init();
+</script>
+</body>
+</html>
