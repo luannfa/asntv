@@ -221,10 +221,22 @@ if (!channelSlug) {
 /* ══════════════════════════════════════════════
    CARREGAMENTO DE DADOS
 ══════════════════════════════════════════════ */
+async function fetchCSV() {
+  // Tenta busca direta primeiro; se falhar, usa proxy CORS
+  try {
+    const res = await fetch(SHEET_CSV_URL + '&t=' + Date.now());
+    if (res.ok) return await res.text();
+  } catch (_) {}
+  // Fallback: proxy CORS
+  const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(SHEET_CSV_URL);
+  const res2  = await fetch(proxy);
+  const json  = await res2.json();
+  return json.contents;
+}
+
 async function loadData() {
   try {
-    const res  = await fetch(SHEET_CSV_URL + '&t=' + Date.now());
-    const text = await res.text();
+    const text = await fetchCSV();
     const rows = parseCSV(text);
 
     if (rows.length < 2) {
@@ -274,8 +286,7 @@ async function loadData() {
 
 async function silentRefresh() {
   try {
-    const res  = await fetch(SHEET_CSV_URL + '&t=' + Date.now());
-    const text = await res.text();
+    const text = await fetchCSV();
     const rows = parseCSV(text);
     if (rows.length < 2) return;
 
@@ -502,4 +513,3 @@ function showError(msg) {
 </script>
 </body>
 </html>
-
