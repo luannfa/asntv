@@ -370,9 +370,19 @@ function normalizeUrl(url, type) {
     return base + '/embed';
   }
 
-  // Google Drive → preview
-  if (url.includes('drive.google.com') && url.includes('/view')) {
-    return url.replace('/view', '/preview');
+  // Google Drive → imagem direta ou preview
+  if (url.includes('drive.google.com')) {
+    const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (idMatch) {
+      const fileId = idMatch[1];
+      if (type === 'imagem' || type === 'image') {
+        // Imagem: usar URL direta
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      } else {
+        // PDF, vídeo: usar preview
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
+    }
   }
 
   return url;
