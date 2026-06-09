@@ -6,6 +6,12 @@
         "tipo": "video",
         "url": "https://drive.google.com/file/d/1Kagr0f3cpzywyyOo31mcep0qrliu6YT5/preview",
         "duracao": 70
+      },
+      {
+        "titulo": "imagem000",
+        "tipo": "imagem",
+        "url": "https://luannfa.github.io/asntv/img/enem.png",
+        "duracao": 10
       }
     ]
   }
