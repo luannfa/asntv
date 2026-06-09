@@ -12,6 +12,12 @@
         "tipo": "video",
         "url": "https://player.vimeo.com/video/1199784908?autoplay=1&loop=1&muted=1",
         "duracao": 70
+      },
+      {
+        "titulo": "toninho",
+        "tipo": "video",
+        "url": "https://player.vimeo.com/video/1199784898?autoplay=1&loop=1&muted=1",
+        "duracao": 5
       }
     ]
   }
