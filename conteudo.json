@@ -24,6 +24,12 @@
         "tipo": "imagem",
         "url": "https://luannfa.github.io/asntv/img/1.jpg",
         "duracao": 10
+      },
+      {
+        "titulo": "img2",
+        "tipo": "imagem",
+        "url": "https://luannfa.github.io/asntv/img/1.jpg",
+        "duracao": 10
       }
     ]
   }
