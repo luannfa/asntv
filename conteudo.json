@@ -20,15 +20,15 @@
         "duracao": 80
       },
       {
-        "titulo": "toninho",
-        "tipo": "video",
-        "url": "https://player.vimeo.com/video/1199784898?autoplay=1&loop=1&muted=1",
-        "duracao": 10
-      },
-      {
         "titulo": "img2",
         "tipo": "imagem",
         "url": "https://luannfa.github.io/asntv/img/1.jpg",
+        "duracao": 10
+      },
+      {
+        "titulo": "toninho",
+        "tipo": "video",
+        "url": "https://player.vimeo.com/video/1199784898?autoplay=1&loop=1&muted=1",
         "duracao": 10
       },
       {
