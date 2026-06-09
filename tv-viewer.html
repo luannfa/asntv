@@ -155,6 +155,7 @@
       font-size: 11px;
       color: rgba(255,255,255,.35);
     }
+
   </style>
 </head>
 <body>
@@ -186,11 +187,11 @@
 
 <script>
 /* ══════════════════════════════════════════════
-   CONFIGURAÇÃO — altere apenas esta linha
+   CONFIGURAÇÃO
 ══════════════════════════════════════════════ */
-const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRT265YDAYO-AMMsoq1NYoCbi-1l3SsSKYjs-46BdG-1ULicxB-dwFnGBMKUWWzRB6AtdHjESGqQ0iR/pub?output=csv';
+const JSON_URL         = 'conteudo.json';
 const DEFAULT_DURATION = 15;   // segundos padrão por item
-const REFRESH_EVERY    = 120;  // recarregar planilha a cada X segundos
+const REFRESH_EVERY    = 60;   // recarregar conteúdo a cada X segundos
 const OVERLAY_HIDE     = 3500; // ms para esconder controles
 
 /* ══════════════════════════════════════════════
@@ -221,123 +222,52 @@ if (!channelSlug) {
 /* ══════════════════════════════════════════════
    CARREGAMENTO DE DADOS
 ══════════════════════════════════════════════ */
-async function fetchCSV() {
-  // Tenta busca direta primeiro; se falhar, usa proxy CORS
-  try {
-    const res = await fetch(SHEET_CSV_URL + '&t=' + Date.now());
-    if (res.ok) return await res.text();
-  } catch (_) {}
-  // Fallback: proxy CORS
-  const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(SHEET_CSV_URL);
-  const res2  = await fetch(proxy);
-  const json  = await res2.json();
-  return json.contents;
-}
-
 async function loadData() {
   try {
-    const text = await fetchCSV();
-    const rows = parseCSV(text);
+    const res  = await fetch(JSON_URL + '?t=' + Date.now());
+    const json = await res.json();
+    const canal = (json.canais || {})[channelSlug];
 
-    if (rows.length < 2) {
-      showError('Planilha vazia ou sem dados. Adicione linhas na planilha.');
-      return;
-    }
-
-    // Linha 0 = cabeçalho, demais = dados
-    const header = rows[0].map(h => h.trim().toLowerCase());
-    const col = {
-      canal   : header.indexOf('canal'),
-      titulo  : header.indexOf('titulo'),
-      tipo    : header.indexOf('tipo'),
-      url     : header.indexOf('url'),
-      duracao : header.indexOf('duracao'),
-    };
-
-    const parsed = rows.slice(1)
-      .filter(row => row[col.canal] && row[col.canal].trim().toLowerCase() === channelSlug)
-      .map(row => ({
-        title   : (row[col.titulo] || '').trim(),
-        type    : (row[col.tipo]   || 'imagem').trim().toLowerCase(),
-        url     : normalizeUrl((row[col.url] || '').trim(), (row[col.tipo] || '').trim().toLowerCase()),
-        duration: parseInt(row[col.duracao], 10) || DEFAULT_DURATION,
-      }))
-      .filter(item => item.url);
-
-    if (parsed.length === 0) {
+    if (!canal) {
       showError(
-        `Nenhum conteúdo encontrado para o canal <strong>"${channelSlug}"</strong>.<br>` +
-        `Verifique se a coluna <em>canal</em> da planilha tem exatamente esse valor.`
+        `Canal <strong>"${channelSlug}"</strong> não encontrado.<br>` +
+        `Crie o canal no painel admin e adicione conteúdos.`
       );
       return;
     }
+    if (canal.length === 0) {
+      showError(`Canal <strong>"${channelSlug}"</strong> sem conteúdo.<br>Adicione itens no painel admin.`);
+      return;
+    }
 
-    items = parsed;
+    items = canal.map(item => ({
+      title   : item.titulo  || '',
+      type    : item.tipo    || 'imagem',
+      url     : item.url     || '',
+      duration: item.duracao || DEFAULT_DURATION,
+    })).filter(i => i.url);
 
     document.getElementById('channel-label').textContent = channelSlug;
     document.title = `TV – ${channelSlug}`;
-
     startPlayer();
 
   } catch (err) {
-    showError('Erro ao carregar a planilha: ' + err.message);
+    showError('Erro ao carregar conteúdo: ' + err.message);
   }
 }
 
 async function silentRefresh() {
   try {
-    const text = await fetchCSV();
-    const rows = parseCSV(text);
-    if (rows.length < 2) return;
-
-    const header = rows[0].map(h => h.trim().toLowerCase());
-    const col = {
-      canal: header.indexOf('canal'), titulo: header.indexOf('titulo'),
-      tipo: header.indexOf('tipo'), url: header.indexOf('url'), duracao: header.indexOf('duracao'),
-    };
-
-    const parsed = rows.slice(1)
-      .filter(row => row[col.canal] && row[col.canal].trim().toLowerCase() === channelSlug)
-      .map(row => ({
-        title: (row[col.titulo] || '').trim(),
-        type: (row[col.tipo] || 'imagem').trim().toLowerCase(),
-        url: normalizeUrl((row[col.url] || '').trim(), (row[col.tipo] || '').trim().toLowerCase()),
-        duration: parseInt(row[col.duracao], 10) || DEFAULT_DURATION,
-      }))
-      .filter(item => item.url);
-
-    if (parsed.length > 0) {
-      items = parsed;
-      rebuildDots();
-    }
+    const res  = await fetch(JSON_URL + '?t=' + Date.now());
+    const json = await res.json();
+    const canal = (json.canais || {})[channelSlug];
+    if (!canal || canal.length === 0) return;
+    const parsed = canal.map(item => ({
+      title: item.titulo || '', type: item.tipo || 'imagem',
+      url: item.url || '', duration: item.duracao || DEFAULT_DURATION,
+    })).filter(i => i.url);
+    if (parsed.length > 0) { items = parsed; rebuildDots(); }
   } catch (_) { /* silencioso */ }
-}
-
-/* ══════════════════════════════════════════════
-   PARSER CSV  (suporta campos com vírgulas entre aspas)
-══════════════════════════════════════════════ */
-function parseCSV(text) {
-  const rows = [];
-  const lines = text.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cols = [];
-    let cur = '', inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
-        else inQuote = !inQuote;
-      } else if (ch === ',' && !inQuote) {
-        cols.push(cur); cur = '';
-      } else {
-        cur += ch;
-      }
-    }
-    cols.push(cur);
-    rows.push(cols);
-  }
-  return rows;
 }
 
 /* ══════════════════════════════════════════════
@@ -427,9 +357,9 @@ function renderContent(item) {
       !item.url.includes('player.vimeo')) {
     const v = document.createElement('video');
     v.src = item.url; v.autoplay = true; v.loop = true;
-    v.muted = false; v.controls = false; v.playsInline = true;
+    v.muted = true; v.controls = false; v.playsInline = true;
     wrap.appendChild(v);
-    v.play().catch(() => { v.muted = true; v.play(); });
+    v.play().catch(() => {});
     return;
   }
 
