@@ -8,12 +8,6 @@
         "duracao": 10
       },
       {
-        "titulo": "imagem000",
-        "tipo": "imagem",
-        "url": "https://luannfa.github.io/asntv/img/enem.png",
-        "duracao": 10
-      },
-      {
         "titulo": "log",
         "tipo": "video",
         "url": "https://player.vimeo.com/video/1199784908?autoplay=1&loop=1&muted=1",
