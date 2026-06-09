@@ -48,6 +48,12 @@
         "tipo": "imagem",
         "url": "https://luannfa.github.io/asntv/img/ama.png",
         "duracao": 15
+      },
+      {
+        "titulo": "enem",
+        "tipo": "imagem",
+        "url": "https://luannfa.github.io/asntv/img/enem.png",
+        "duracao": 15
       }
     ]
   }
